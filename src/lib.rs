@@ -1,12 +1,19 @@
 //!
-//! # C++11-ish
+//! # Modern C++-ish closure macros.
 //!
-//! [@see](https://github.com/oliver-giersch/closure/blob/master/src/lib.rs)
+//! This crate provides the [`capture`] macro, which implements C++11's lambda-style capture
+//! functionality. It uses only a list of AST-parsable tokens, so it can be automatically
+//! formatted by `rustfmt`.
+//!
+//! most of macro expressions are inspired* from the crate
+//! [`oliver-giersch/closure`](https://github.com/oliver-giersch/closure/blob/master/src/lib.rs)
 //!
 
 ///
 /// Generate a closure that captures specified variables, and captures all other
 /// unspecified variables by **move**.
+///
+/// TODO: fill documentation content here
 ///
 #[macro_export]
 macro_rules! capture {
