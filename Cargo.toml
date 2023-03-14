@@ -4,3 +4,4 @@ version = "0.1.0"
 authors = ["kang-sw <ki6080@gmail.com>"]
 edition = "2021"
 description = "Modern c++-ish capture syntax for rust"
+repository = "https://github.com/kang-sw/capture-it"

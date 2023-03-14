@@ -14,11 +14,6 @@ macro_rules! capture {
         $crate::__capture!($($args)*,);
         $crate::__wrap_touched!([$($args)*] $($closure)*)
     }};
-
-    ([$($args:tt)*] $($closure:tt)*) => {{
-        $crate::__capture!($($args)*,);
-        $crate::__wrap_touched!([$($args)*] $($closure)*)
-    }};
 }
 
 /// Generate a closure that touches all specified variables, which makes all of them to be
@@ -71,9 +66,11 @@ macro_rules! __wrap_touched {
     };
 }
 
+/// Enforces the compiler to capture all variables in the closure.
 #[macro_export(local_inner_macros)]
 #[doc(hidden)]
-macro_rules! __touch_all {/* ----------------------------------------- By Copy ---------------------------------------- */
+macro_rules! __touch_all {
+    /* ----------------------------------------- By Copy ---------------------------------------- */
     ($v:ident, $($tail:tt)*) => {
         drop(&$v);
         $crate::__touch_all!($($tail)*);
@@ -96,12 +93,12 @@ macro_rules! __touch_all {/* ----------------------------------------- By Copy -
     };
 
     /* -------------------------------------- By Expression ------------------------------------- */
-    ($a:ident=$v:expr, $($tail:tt)*) => {
+    ($a:ident=$_:expr, $($tail:tt)*) => {
         drop(&$a);
         $crate::__touch_all!($($tail)*);
     };
 
-    (* $a:ident=$v:expr, $($tail:tt)*) => {
+    (* $a:ident=$_:expr, $($tail:tt)*) => {
         drop(&$a);
         $crate::__touch_all!($($tail)*);
     };
@@ -169,12 +166,14 @@ macro_rules! __capture {
 
     /* ------------------------------------- Struct By Copy ------------------------------------- */
     ($($ids:ident).+, $($tail:tt)*) => {
-        let $crate::__last_tok!($($ids).+) = Clone::clone(&$($ids).+);
+        let _g = Clone::clone(&$($ids).+);
+        let $crate::__last_tok!($($ids).+) = _g; // this helps you to get rust-analyzer support.
         $crate::__capture!($($tail)*);
     };
 
     (* $($ids:ident).+, $($tail:tt)*) => {
-        let $crate::__last_tok_mut!($($ids).+) = Clone::clone(&$($ids).+);
+        let _g = Clone::clone(&$($ids).+);
+        let $crate::__last_tok_mut!($($ids).+) = _g;
         $crate::__capture!($($tail)*);
     };
 
@@ -217,7 +216,6 @@ mod test {
         inner_mut: Rc<()>,
     }
 
-    #[ignore]
     #[test]
     fn can_compile() {
         let ss = Rc::new(());
@@ -227,8 +225,6 @@ mod test {
             inner_mut: ss.clone(),
         };
 
-        let _ = capture!([], || {});
-
         let _ = capture!(
             [
                 foo,
@@ -237,8 +233,9 @@ mod test {
                 &mut qux,
                 cloned = bar.clone(),
                 *other = cloned.clone(),
+                oar = 3,
                 strt.inner,
-                *strt.inner_mut
+                *strt.inner_mut,
             ],
             || {
                 drop((other, inner_mut, bar));
@@ -255,7 +252,7 @@ mod test {
     // shamelessly cloned test cases from https://github.com/oliver-giersch/closure/blob/master/src/lib.rs
     #[test]
     fn no_capture_one_line() {
-        let closure = capture!([] || 5 * 5);
+        let closure = capture!([], || 5 * 5);
         assert_eq!(closure(), 25);
     }
 
@@ -267,7 +264,7 @@ mod test {
 
     #[test]
     fn no_capture_with_arg_and_type_hint() {
-        let closure = capture!([] | x: usize | x * x);
+        let closure = capture!([], |x: usize| x * x);
         assert_eq!(closure(5), 25);
     }
 
@@ -286,7 +283,7 @@ mod test {
     #[test]
     fn capture_by_move() {
         let string = "move".to_string();
-        let closure = capture!([] || string.len());
+        let closure = capture!([], || string.len());
         assert_eq!(closure(), 4);
     }
 
