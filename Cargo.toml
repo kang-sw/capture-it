@@ -1,6 +1,6 @@
 [package]
 name = "capture-it"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["kang-sw <ki6080@gmail.com>"]
 edition = "2021"
 description = "Modern c++-ish capture syntax for rust"
