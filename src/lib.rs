@@ -71,6 +71,14 @@ macro_rules! __wrap_touched {
             $content
         }
     };
+
+    /* ------------------------------------------ Async ----------------------------------------- */
+    ([$($args:tt)*] async {$($content:tt)*}) => {
+        async move {
+            $crate::__touch_all!($($args)*,);
+            $($content)*
+        }
+    };
 }
 
 /// Enforces the compiler to capture all variables in the closure.
@@ -216,7 +224,7 @@ macro_rules! __last_tok_mut {
 
 #[cfg(test)]
 mod test {
-    use std::rc::Rc;
+    use std::{cell::Cell, rc::Rc};
 
     struct Foo {
         inner: Rc<()>,
@@ -336,5 +344,49 @@ mod test {
             }
         );
         assert!(closure(0));
+    }
+
+    #[test]
+    fn async_closure() {
+        let rc = Rc::new(Cell::new(0));
+        let mut borrowed = 1;
+        let copied = 2;
+        let task = capture!([rc, copied, &mut borrowed], async {
+            assert!(rc.get() == 2);
+            rc.set(1);
+            *borrowed = 2;
+        });
+
+        rc.set(2);
+        let rc = rc; // to check if rc was correctly copied, not referenced ...
+
+        futures::executor::block_on(task);
+        assert!(rc.get() == 1);
+        assert!(borrowed == 2);
+        assert!(copied == 2);
+    }
+
+    #[test]
+    fn struct_field() {
+        struct Bar {
+            borrowed: i32,
+            copied: i32,
+        }
+
+        let mut val = Bar {
+            borrowed: 1,
+            copied: 2,
+        };
+
+        let mut closure = capture!([&mut val.borrowed, val.copied], || {
+            assert_eq!(*borrowed, 1);
+            assert_eq!(copied, 2);
+
+            *borrowed = 3;
+        });
+
+        closure();
+        assert_eq!(val.borrowed, 3);
+        assert_eq!(val.copied, 2);
     }
 }
