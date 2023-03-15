@@ -81,7 +81,37 @@
 /// capture each struct field as a copy and a reference, respectively.
 ///
 /// ```rust
+/// struct Foo {
+///     copied: i32,
+///     borrowed: std::cell::Cell<i32>,
+/// }
 ///
+/// let mut foo = Foo { copied: 1, borrowed: 2.into() };
+/// let closure = capture_it::capture!([foo.copied, &foo.borrowed], move || {
+///     copied + borrowed.get()
+/// });
+///
+/// foo.copied = 9999;
+/// foo.borrowed.set(3);
+/// assert_eq!(closure(), 4);
+/// ```
+///
+/// ### async blocks
+///
+/// All rules apply equally to the `async move` block.
+///
+/// ```rust
+/// let mut copied = 1;
+/// let borrowed = std::cell::Cell::new(2);
+/// let task = capture_it::capture!([copied, &borrowed], async move {
+///    copied + borrowed.get()
+/// });
+///
+/// copied = 9999;
+/// borrowed.set(3);
+///
+/// let val = futures::executor::block_on(task);
+/// assert_eq!(val, 4);
 /// ```
 ///
 #[macro_export]
