@@ -8,23 +8,23 @@ fn main() {
     let va = Arc::new(AtomicUsize::new(0));
 
     // This expr makes a closure that captures `va` by copy
-    std::thread::spawn(capture!([va], || {
+    std::thread::spawn(capture!([va], move || {
         va.fetch_add(1, Relaxed);
     }));
 
     // We can create new variable with expression, same as c++.
-    std::thread::spawn(capture!([va_other = va.clone()], || {
+    std::thread::spawn(capture!([va_other = va.clone()], move || {
         va_other.fetch_add(1, Relaxed);
     }));
 
     // Asterisk-prefixed variable will be declared as mutable.
-    std::thread::spawn(capture!([*va], || {
+    std::thread::spawn(capture!([*va], move || {
         va = Arc::new(AtomicUsize::new(0));
         va.fetch_add(1, Relaxed);
     }));
 
     // This expr makes a closure that captures `va` by reference
-    while capture!([&va], || -> bool {
+    while capture!([&va], move || -> bool {
         if va.load(Relaxed) == 2 {
             // the last thread does not increment same reference ...
             false
@@ -38,7 +38,7 @@ fn main() {
     assert_eq!(va.load(Relaxed), 2);
 
     // This expr makes a closure that captures `va` by move
-    let _ = capture!([], || { va });
+    let _ = capture!([], move || { va });
 
     // Therefore, we can't access `va` anymore
     // let _ = capture!([], || { va }); // this line will cause compile error!

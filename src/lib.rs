@@ -13,7 +13,76 @@
 /// Generate a closure that captures specified variables, and captures all other
 /// unspecified variables by **move**.
 ///
-/// TODO: fill documentation content here
+/// The first argument to the macro is always a list of capture arguments wrapped in [],
+/// and you pass a closure or async block to the second argument, separated by commas.
+/// In this case, the second argument must be explicitly specified as move capture.
+///
+/// # Usage
+///
+/// ### capture by copy
+///
+/// If you specify a variable name in square brackets, the [`Clone::clone`] function is called
+/// against that variable, creating a variable of the same name and capturing it with the
+/// specified closure. (Capturing the variable is always guaranteed, even if you don't
+/// explicitly use it within the block.)
+///
+/// ```rust
+/// let a = 1;
+/// let closure = capture_it::capture!([a], move || { a });
+/// assert_eq!(closure(), 1);
+/// ```
+///
+/// All of these rules, except for reference capture (the & prefix), which we'll discuss later,
+/// can be declared mutable by prefixing the variable name with * (an asterisk).
+///
+/// (NOTE: We originally wanted to use the `mut` keyword prefix, but that would cause
+/// `rustfmt` to consider the macro expression as unjustified rust code and disable formatting,
+/// so we were forced to adopt this unorthodox method)
+///
+/// ```rust
+/// let count = 0;
+/// let mut closure = capture_it::capture!([*count], move || { count += 1; count });
+///
+/// assert_eq!(closure(), 1);
+/// assert_eq!(closure(), 2);
+/// assert_eq!(closure(), 3);
+/// ```
+///
+/// ### capture by reference
+///
+/// You can explicitly reference-capture a variable by prefixing its name with & or &mut. (Note
+/// that all variables not specified in the capture list will be MOVE-captured, as only blocks with
+/// a MOVE policy are allowed as second arguments. Any variables you want to capture by reference
+/// must be explicitly specified in the capture list)
+///
+/// ```rust
+/// let a = std::cell::Cell::new(1);
+/// let closure = capture_it::capture!([&a], move || { a.get() });
+/// a.set(2);
+/// assert_eq!(closure(), 2);
+/// ```
+///
+/// ### capture by alias
+///
+/// Similar to the lambda capture rules in modern C++, it is possible to capture an expression
+/// by giving it an alias.
+///
+/// ```rust
+/// let mut closure = capture_it::capture!([*a = 0], move || { a += 1; a });
+///
+/// assert_eq!(closure(), 1);
+/// assert_eq!(closure(), 2);
+/// assert_eq!(closure(), 3);
+/// ```
+///
+/// ### capture struct fields
+///
+/// Under limited conditions, you can capture struct fields. The following expressions will
+/// capture each struct field as a copy and a reference, respectively.
+///
+/// ```rust
+///
+/// ```
 ///
 #[macro_export]
 macro_rules! capture {
@@ -29,21 +98,21 @@ macro_rules! capture {
 #[doc(hidden)]
 macro_rules! __wrap_touched {
     /* --------------------------------------- Parametered -------------------------------------- */
-    ([$($args:tt)*] |$($params:tt $(:$param_type:ty)?),*| $($deco:ident)* { $($content:tt)* }) => {
+    ([$($args:tt)*] move |$($params:tt $(:$param_type:ty)?),*| $($deco:ident)* { $($content:tt)* }) => {
         move |$($params $(:$param_type)?),*| $($deco)* {
             $crate::__touch_all!($($args)*,);
             $($content)*
         }
     };
 
-    ([$($args:tt)*] |$($params:tt $(:$param_type:ty)?),*| -> $rt:ty { $($content:tt)* }) => {
+    ([$($args:tt)*] move |$($params:tt $(:$param_type:ty)?),*| -> $rt:ty { $($content:tt)* }) => {
         move |$($params $(:$param_type)?),*| -> $rt {
             $crate::__touch_all!($($args)*,);
             $($content)*
         }
     };
 
-    ([$($args:tt)*] |$($params:tt $(:$param_type:ty)?),*| $content:expr) => {
+    ([$($args:tt)*] move |$($params:tt $(:$param_type:ty)?),*| $content:expr) => {
         move |$($params $(:$param_type)?),*| {
             $crate::__touch_all!($($args)*,);
             $content
@@ -51,21 +120,21 @@ macro_rules! __wrap_touched {
     };
 
     /* ------------------------------------- Zero-parameter ------------------------------------- */
-    ([$($args:tt)*] || $($deco:ident)* {$($content:tt)*}) => {
+    ([$($args:tt)*]move  || $($deco:ident)* {$($content:tt)*}) => {
         move || $($deco)* {
             $crate::__touch_all!($($args)*,);
             $($content)*
         }
     };
 
-    ([$($args:tt)*] || -> $rt:ty { $($content:tt)* }) => {
+    ([$($args:tt)*] move || -> $rt:ty { $($content:tt)* }) => {
         move || -> $rt {
             $crate::__touch_all!($($args)*,);
             $($content)*
         }
     };
 
-    ([$($args:tt)*] || $content:expr) => {
+    ([$($args:tt)*] move || $content:expr) => {
         move || {
             $crate::__touch_all!($($args)*,);
             $content
@@ -73,7 +142,7 @@ macro_rules! __wrap_touched {
     };
 
     /* ------------------------------------------ Async ----------------------------------------- */
-    ([$($args:tt)*] async {$($content:tt)*}) => {
+    ([$($args:tt)*] async move {$($content:tt)*}) => {
         async move {
             $crate::__touch_all!($($args)*,);
             $($content)*
@@ -252,7 +321,7 @@ mod test {
                 strt.inner,
                 *strt.inner_mut,
             ],
-            || {
+            move || {
                 drop((other, inner_mut, bar));
 
                 bar = Default::default();
@@ -267,52 +336,52 @@ mod test {
     // shamelessly cloned test cases from https://github.com/oliver-giersch/closure/blob/master/src/lib.rs
     #[test]
     fn no_capture_one_line() {
-        let closure = capture!([], || 5 * 5);
+        let closure = capture!([], move || 5 * 5);
         assert_eq!(closure(), 25);
     }
 
     #[test]
     fn no_capture_with_arg() {
-        let closure = capture!([], |x| x * x);
+        let closure = capture!([], move |x| x * x);
         assert_eq!(closure(5), 25);
     }
 
     #[test]
     fn no_capture_with_arg_and_type_hint() {
-        let closure = capture!([], |x: usize| x * x);
+        let closure = capture!([], move |x: usize| x * x);
         assert_eq!(closure(5), 25);
     }
 
     #[test]
     fn no_capture_with_arg_and_return_type() {
-        let closure = capture!([], |x: usize| -> usize { x * x });
+        let closure = capture!([], move |x: usize| -> usize { x * x });
         assert_eq!(closure(5), 25);
     }
 
     #[test]
     fn no_capture_with_return_type() {
-        let closure = capture!([], || -> &str { "result" });
+        let closure = capture!([], move || -> &str { "result" });
         assert_eq!(closure(), "result");
     }
 
     #[test]
     fn capture_by_move() {
         let string = "move".to_string();
-        let closure = capture!([], || string.len());
+        let closure = capture!([], move || string.len());
         assert_eq!(closure(), 4);
     }
 
     #[test]
     fn capture_by_ref() {
         let var = -1;
-        let closure = capture!([&var], || *var == -1);
+        let closure = capture!([&var], move || *var == -1);
         assert!(closure());
     }
 
     #[test]
     fn capture_by_ref_mut() {
         let mut var = -1;
-        capture!([&mut var], || *var *= -1)();
+        capture!([&mut var], move || *var *= -1)();
         assert_eq!(var, 1);
     }
 
@@ -322,7 +391,7 @@ mod test {
         let mut borrow_mut = 1;
         let string = "move".to_string();
 
-        let closure = capture!([&borrow, &mut borrow_mut, *string], || {
+        let closure = capture!([&borrow, &mut borrow_mut, *string], move || {
             assert_eq!(*borrow, 1);
             *borrow_mut -= 1;
             string.push_str("d back");
@@ -338,7 +407,7 @@ mod test {
         let rc = Rc::new(0);
         let closure = capture!(
             [rc, _unused_but_captured = rc.clone()],
-            |expected| -> bool {
+            move |expected| -> bool {
                 assert_eq!(Rc::strong_count(&rc), 3);
                 *rc == expected
             }
@@ -351,7 +420,7 @@ mod test {
         let rc = Rc::new(Cell::new(0));
         let mut borrowed = 1;
         let copied = 2;
-        let task = capture!([rc, copied, &mut borrowed], async {
+        let task = capture!([rc, copied, &mut borrowed], async move {
             assert!(rc.get() == 2);
             rc.set(1);
             *borrowed = 2;
@@ -378,7 +447,7 @@ mod test {
             copied: 2,
         };
 
-        let mut closure = capture!([&mut val.borrowed, val.copied], || {
+        let mut closure = capture!([&mut val.borrowed, val.copied], move || {
             assert_eq!(*borrowed, 1);
             assert_eq!(copied, 2);
 
