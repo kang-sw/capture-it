@@ -46,6 +46,8 @@
 /// assert_eq!(closure(), 1);
 /// assert_eq!(closure(), 2);
 /// assert_eq!(closure(), 3);
+///
+/// assert_eq!(count, 0); // as it was copied ...
 /// ```
 ///
 /// ### capture by reference
