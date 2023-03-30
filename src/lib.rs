@@ -241,6 +241,28 @@ macro_rules! __touch_all {
         $crate::__touch_all!($($tail)*);
     };
 
+    /* ----------------------------------------- By Ops ----------------------------------------- */
+    ($ops:ident ($v:ident), $($tail:tt)*) => {
+        drop(&$v);
+        $crate::__touch_all!($($tail)*);
+    };
+
+    (*$ops:ident ($v:ident), $($tail:tt)*) => {
+        drop(&$v);
+        $crate::__touch_all!($($tail)*);
+    };
+
+    ($ops:ident ($($ids:ident).+), $($tail:tt)*) => {
+        drop(&$crate::__last_tok!($($ids).+));
+        $crate::__touch_all!($($tail)*);
+    };
+
+    (*$ops:ident ($($ids:ident).+), $($tail:tt)*) => {
+        drop(&$crate::__last_tok!($($ids).+));
+        $crate::__touch_all!($($tail)*);
+    };
+
+    /* ----------------------------------------- Escape ----------------------------------------- */
     ($(,)*) => {};
 }
 
@@ -282,14 +304,14 @@ macro_rules! __capture {
 
     /* ------------------------------------- Struct By Copy ------------------------------------- */
     ($($ids:ident).+, $($tail:tt)*) => {
-        let _g = Clone::clone(&$($ids).+);
-        let $crate::__last_tok!($($ids).+) = _g; // this helps you to get rust-analyzer support.
+        let __capture_it = Clone::clone(&$($ids).+);
+        let $crate::__last_tok!($($ids).+) = __capture_it; // this helps you to get rust-analyzer support.
         $crate::__capture!($($tail)*);
     };
 
     (* $($ids:ident).+, $($tail:tt)*) => {
-        let _g = Clone::clone(&$($ids).+);
-        let $crate::__last_tok_mut!($($ids).+) = _g;
+        let __capture_it = Clone::clone(&$($ids).+);
+        let $crate::__last_tok_mut!($($ids).+) = __capture_it;
         $crate::__capture!($($tail)*);
     };
 
@@ -304,7 +326,39 @@ macro_rules! __capture {
         $crate::__capture!($($tail)*);
     };
 
+    /* ----------------------------------------- By Ops ----------------------------------------- */
+    ($ops:ident ($v:ident), $($tail:tt)*) => {
+        let $v = $crate::__apply_ops($ops, $v);
+        $crate::__capture!($($tail)*);
+    };
+
+    (*$ops:ident ($v:ident), $($tail:tt)*) => {
+        let mut $v = $crate::__apply_ops($ops, $v);
+        $crate::__capture!($($tail)*);
+    };
+
+    ($ops:ident ($($ids:ident).+), $($tail:tt)*) => {
+        let __capture_it = $crate::__apply_ops($ops, $v);
+        let $crate::__last_tok!($($ids).+) = __capture_it;
+        $crate::__capture!($($tail)*);
+    };
+
+    (*$ops:ident ($($ids:ident).+), $($tail:tt)*) => {
+        let __capture_it = $crate::__apply_ops($ops, $v);
+        let $crate::__last_tok_mut!($($ids).+) = __capture_it;
+        $crate::__capture!($($tail)*);
+    };
+
+    /* ----------------------------------------- Escape ----------------------------------------- */
     ($(,)*) => {};
+}
+
+#[macro_export(local_inner_macros)]
+#[doc(hidden)]
+macro_rules! __apply_ops {
+    (own, $v:ident) => {
+        std::borrow::ToOwned::to_owned(&$v)
+    };
 }
 
 #[macro_export(local_inner_macros)]
