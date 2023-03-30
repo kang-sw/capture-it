@@ -116,6 +116,37 @@
 /// assert_eq!(val, 4);
 /// ```
 ///
+/// ## Shortcuts
+///
+/// There are various shortcuts for capturing variables for convenience.
+///
+/// - `Own`: Call the `to_owned()` method on the target variable.
+/// - `Weak`: Downgrades a `Rc` or `Arc` type to a Weak reference.
+/// - `self::<method>`: Call `method` on the given variable.
+/// - All paths that do not fall under the above rules (`$($p:ident)::*`) are replaced
+///   with function calls.
+///
+/// ```rust
+/// use capture_it::capture;
+///
+/// let hello = "hello, world!";
+/// let rc = std::rc::Rc::new(());
+/// let arc = std::sync::Arc::new(());
+/// let arc_2 = arc.clone();
+/// let hello_other = "hello, other!";
+///
+/// let closure = capture!([Own(hello), Weak(rc), Weak(arc), arc_2, *self::to_string(hello_other)], move || {
+///     assert_eq!(hello, "hello, world!");
+///     assert!(rc.upgrade().is_none());
+///     assert!(arc.upgrade().is_some());
+///     assert_eq!(hello_other, "hello, other!");
+/// });
+///
+/// drop((rc, arc));
+/// closure();
+///
+/// ```
+///
 #[macro_export]
 macro_rules! capture {
     ([$($args:tt)*], $($closure:tt)*) => {{
@@ -242,22 +273,22 @@ macro_rules! __touch_all {
     };
 
     /* ----------------------------------------- By Ops ----------------------------------------- */
-    ($ops:ident ($v:ident), $($tail:tt)*) => {
+    ($($ops:ident)::* ($v:ident), $($tail:tt)*) => {
         drop(&$v);
         $crate::__touch_all!($($tail)*);
     };
 
-    (*$ops:ident ($v:ident), $($tail:tt)*) => {
+    (*$($ops:ident)::* ($v:ident), $($tail:tt)*) => {
         drop(&$v);
         $crate::__touch_all!($($tail)*);
     };
 
-    ($ops:ident ($($ids:ident).+), $($tail:tt)*) => {
+    ($($ops:ident)::* ($($ids:ident).+), $($tail:tt)*) => {
         drop(&$crate::__last_tok!($($ids).+));
         $crate::__touch_all!($($tail)*);
     };
 
-    (*$ops:ident ($($ids:ident).+), $($tail:tt)*) => {
+    (*$($ops:ident)::* ($($ids:ident).+), $($tail:tt)*) => {
         drop(&$crate::__last_tok!($($ids).+));
         $crate::__touch_all!($($tail)*);
     };
@@ -269,26 +300,45 @@ macro_rules! __touch_all {
 #[macro_export(local_inner_macros)]
 #[doc(hidden)]
 macro_rules! __capture {
-    /* ----------------------------------------- By Copy ---------------------------------------- */
-    ($v:ident, $($tail:tt)*) => {
-        let $v = Clone::clone(&$v);
+    /* ----------------------------------------- By Ops ----------------------------------------- */
+    ($($ops:ident)::* ($v:ident), $($tail:tt)*) => {
+        let $v = $crate::__apply_ops!($($ops)::*, $v);
         $crate::__capture!($($tail)*);
     };
 
-    (* $v:ident, $($tail:tt)*) => {
-        let mut $v = Clone::clone(&$v);
+    (*$($ops:ident)::* ($v:ident), $($tail:tt)*) => {
+        let mut $v = $crate::__apply_ops!($($ops)::*, $v);
         $crate::__capture!($($tail)*);
+    };
+
+    ($($ops:ident)::* ($($ids:ident).+), $($tail:tt)*) => {
+        let __capture_it = $crate::__apply_ops!($($ops)::*, $($ids).+);
+        let $crate::__last_tok!($($ids).+) = __capture_it;
+        $crate::__capture!($($tail)*);
+    };
+
+    (*$($ops:ident)::* ($($ids:ident).+), $($tail:tt)*) => {
+        let __capture_it = $crate::__apply_ops!($($ops)::*, $($ids).+);
+        let $crate::__last_tok_mut!($($ids).+) = __capture_it;
+        $crate::__capture!($($tail)*);
+    };
+
+    /* ----------------------------------------- By Copy ---------------------------------------- */
+    ($v:ident, $($tail:tt)*) => {
+        $crate::__capture!(Clone::clone($v), $($tail)*);
+    };
+
+    (* $v:ident, $($tail:tt)*) => {
+        $crate::__capture!(*Clone::clone($v), $($tail)*);
     };
 
     /* -------------------------------------- By Reference -------------------------------------- */
     (&$v:ident, $($tail:tt)*) => {
-        let $v = &$v;
-        $crate::__capture!($($tail)*);
+        $crate::__capture!(__builtin::refer($v), $($tail)*);
     };
 
     (&mut $v:ident, $($tail:tt)*) => {
-        let $v = &mut $v;
-        $crate::__capture!($($tail)*);
+        $crate::__capture!(__builtin::refer_mut($v), $($tail)*);
     };
 
     /* -------------------------------------- By Expression ------------------------------------- */
@@ -304,49 +354,20 @@ macro_rules! __capture {
 
     /* ------------------------------------- Struct By Copy ------------------------------------- */
     ($($ids:ident).+, $($tail:tt)*) => {
-        let __capture_it = Clone::clone(&$($ids).+);
-        let $crate::__last_tok!($($ids).+) = __capture_it; // this helps you to get rust-analyzer support.
-        $crate::__capture!($($tail)*);
+        $crate::__capture!(Clone::clone($($ids).+), $($tail)*);
     };
 
     (* $($ids:ident).+, $($tail:tt)*) => {
-        let __capture_it = Clone::clone(&$($ids).+);
-        let $crate::__last_tok_mut!($($ids).+) = __capture_it;
-        $crate::__capture!($($tail)*);
+        $crate::__capture!(*Clone::clone($($ids).+), $($tail)*);
     };
 
     /* ----------------------------------- Struct By Reference ---------------------------------- */
     (&$($ids:ident).+, $($tail:tt)*) => {
-        let $crate::__last_tok!($($ids).+) = &$($ids).+;
-        $crate::__capture!($($tail)*);
+        $crate::__capture!(__builtin::refer($($ids).+), $($tail)*);
     };
 
     (&mut $($ids:ident).+, $($tail:tt)*) => {
-        let $crate::__last_tok!($($ids).+) = &mut $($ids).+;
-        $crate::__capture!($($tail)*);
-    };
-
-    /* ----------------------------------------- By Ops ----------------------------------------- */
-    ($ops:ident ($v:ident), $($tail:tt)*) => {
-        let $v = $crate::__apply_ops($ops, $v);
-        $crate::__capture!($($tail)*);
-    };
-
-    (*$ops:ident ($v:ident), $($tail:tt)*) => {
-        let mut $v = $crate::__apply_ops($ops, $v);
-        $crate::__capture!($($tail)*);
-    };
-
-    ($ops:ident ($($ids:ident).+), $($tail:tt)*) => {
-        let __capture_it = $crate::__apply_ops($ops, $v);
-        let $crate::__last_tok!($($ids).+) = __capture_it;
-        $crate::__capture!($($tail)*);
-    };
-
-    (*$ops:ident ($($ids:ident).+), $($tail:tt)*) => {
-        let __capture_it = $crate::__apply_ops($ops, $v);
-        let $crate::__last_tok_mut!($($ids).+) = __capture_it;
-        $crate::__capture!($($tail)*);
+        $crate::__capture!(__builtin::refer_mut($($ids).+), $($tail)*);
     };
 
     /* ----------------------------------------- Escape ----------------------------------------- */
@@ -356,8 +377,28 @@ macro_rules! __capture {
 #[macro_export(local_inner_macros)]
 #[doc(hidden)]
 macro_rules! __apply_ops {
-    (own, $v:ident) => {
-        std::borrow::ToOwned::to_owned(&$v)
+    (Own, $($v:tt)*) => {
+        ($($v)*).to_owned()
+    };
+
+    (Weak, $($v:tt)*) => {
+        $crate::__sync_help::Downgrade::downgrade(&$($v)*)
+    };
+
+    (__builtin::refer, $($v:tt)*) => {
+        &$($v)*
+    };
+
+    (__builtin::refer_mut, $($v:tt)*) => {
+        &mut $($v)*
+    };
+
+    (self :: $fun:ident, $($v:tt)*) => {
+        ($($v)*).$fun()
+    };
+
+    ($($ops:ident)::*, $($v:tt)*) => {
+        ($($ops)::*)(&$($v)*)
     };
 }
 
@@ -375,6 +416,30 @@ macro_rules! __last_tok_mut {
     ($a:ident) => { mut $a };
     ($a:ident. $($tail:tt)*) => { $crate::__last_tok_mut!($($tail)*) };
     () => { compile_error!("??") };
+}
+
+pub mod __sync_help {
+    pub trait Downgrade {
+        type Weak;
+
+        fn downgrade(&self) -> Self::Weak;
+    }
+
+    impl<T> Downgrade for std::rc::Rc<T> {
+        type Weak = std::rc::Weak<T>;
+
+        fn downgrade(&self) -> Self::Weak {
+            std::rc::Rc::downgrade(self)
+        }
+    }
+
+    impl<T> Downgrade for std::sync::Arc<T> {
+        type Weak = std::sync::Weak<T>;
+
+        fn downgrade(&self) -> Self::Weak {
+            std::sync::Arc::downgrade(self)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -462,6 +527,50 @@ mod test {
         let var = -1;
         let closure = capture!([&var], move || *var == -1);
         assert!(closure());
+    }
+
+    #[test]
+    fn capture_by_own() {
+        let my_str = "move";
+        let other_str = "move_2";
+
+        let closure = capture!(
+            [ot = my_str, *Own(my_str), self::to_owned(other_str)],
+            move || {
+                my_str.push_str(" back");
+                my_str
+            }
+        );
+
+        assert_eq!(closure(), "move back");
+    }
+
+    #[test]
+    fn capture_by_downgrade() {
+        let arc = std::sync::Arc::new("hell, world!");
+        let rc = std::rc::Rc::new("hell, world!");
+
+        let closure = capture!([Weak(arc), Weak(rc)], move || {
+            (arc.upgrade().is_some(), rc.upgrade().is_some())
+        });
+
+        drop(arc);
+        assert_eq!(closure(), (false, true));
+    }
+
+    #[test]
+    fn capture_by_own_struct() {
+        struct PewPew {
+            inner: &'static str,
+        }
+
+        let my_pewpew = PewPew { inner: "move" };
+        let closure = capture!([*Own(my_pewpew.inner)], move || {
+            inner.push_str(" back");
+            inner
+        });
+
+        assert_eq!(closure(), "move back");
     }
 
     #[test]
