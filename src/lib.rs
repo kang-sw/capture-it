@@ -144,9 +144,7 @@
 ///
 /// drop((rc, arc));
 /// closure();
-///
 /// ```
-///
 #[macro_export]
 macro_rules! capture {
     ([$($args:tt)*], $($closure:tt)*) => {{
@@ -293,6 +291,27 @@ macro_rules! __touch_all {
         $crate::__touch_all!($($tail)*);
     };
 
+    ($($ops:ident)::* (&$v:ident), $($tail:tt)*) => {
+        drop(&$v);
+        $crate::__touch_all!($($tail)*);
+    };
+
+    (*$($ops:ident)::* (&$v:ident), $($tail:tt)*) => {
+        drop(&$v);
+        $crate::__touch_all!($($tail)*);
+    };
+
+    ($($ops:ident)::* (&$($ids:ident).+), $($tail:tt)*) => {
+        drop(&$crate::__last_tok!($($ids).+));
+        $crate::__touch_all!($($tail)*);
+    };
+
+    (*$($ops:ident)::* (&$($ids:ident).+), $($tail:tt)*) => {
+        drop(&$crate::__last_tok!($($ids).+));
+        $crate::__touch_all!($($tail)*);
+    };
+
+
     /* ----------------------------------------- Escape ----------------------------------------- */
     ($(,)*) => {};
 }
@@ -323,22 +342,45 @@ macro_rules! __capture {
         $crate::__capture!($($tail)*);
     };
 
+    ($($ops:ident)::* (&$v:ident), $($tail:tt)*) => {
+        let $v = $crate::__apply_ops!($($ops)::*, &$v);
+        $crate::__capture!($($tail)*);
+    };
+
+    (*$($ops:ident)::* (&$v:ident), $($tail:tt)*) => {
+        let mut $v = $crate::__apply_ops!($($ops)::*, &$v);
+        $crate::__capture!($($tail)*);
+    };
+
+    ($($ops:ident)::* (&$($ids:ident).+), $($tail:tt)*) => {
+        let __capture_it = $crate::__apply_ops!($($ops)::*, &$($ids).+);
+        let $crate::__last_tok!($($ids).+) = __capture_it;
+        $crate::__capture!($($tail)*);
+    };
+
+    (*$($ops:ident)::* (&$($ids:ident).+), $($tail:tt)*) => {
+        let __capture_it = $crate::__apply_ops!($($ops)::*, &$($ids).+);
+        let $crate::__last_tok_mut!($($ids).+) = __capture_it;
+        $crate::__capture!($($tail)*);
+    };
+
+
     /* ----------------------------------------- By Copy ---------------------------------------- */
     ($v:ident, $($tail:tt)*) => {
-        $crate::__capture!(Clone::clone($v), $($tail)*);
+        $crate::__capture!(Clone::clone(&$v), $($tail)*);
     };
 
     (* $v:ident, $($tail:tt)*) => {
-        $crate::__capture!(*Clone::clone($v), $($tail)*);
+        $crate::__capture!(*Clone::clone(&$v), $($tail)*);
     };
 
     /* -------------------------------------- By Reference -------------------------------------- */
     (&$v:ident, $($tail:tt)*) => {
-        $crate::__capture!(__builtin::refer($v), $($tail)*);
+        $crate::__capture!(__Built_In::refer($v), $($tail)*);
     };
 
     (&mut $v:ident, $($tail:tt)*) => {
-        $crate::__capture!(__builtin::refer_mut($v), $($tail)*);
+        $crate::__capture!(__Built_In::refer_mut($v), $($tail)*);
     };
 
     /* -------------------------------------- By Expression ------------------------------------- */
@@ -354,20 +396,20 @@ macro_rules! __capture {
 
     /* ------------------------------------- Struct By Copy ------------------------------------- */
     ($($ids:ident).+, $($tail:tt)*) => {
-        $crate::__capture!(Clone::clone($($ids).+), $($tail)*);
+        $crate::__capture!(Clone::clone(&$($ids).+), $($tail)*);
     };
 
     (* $($ids:ident).+, $($tail:tt)*) => {
-        $crate::__capture!(*Clone::clone($($ids).+), $($tail)*);
+        $crate::__capture!(*Clone::clone(&$($ids).+), $($tail)*);
     };
 
     /* ----------------------------------- Struct By Reference ---------------------------------- */
     (&$($ids:ident).+, $($tail:tt)*) => {
-        $crate::__capture!(__builtin::refer($($ids).+), $($tail)*);
+        $crate::__capture!(__Built_In::refer($($ids).+), $($tail)*);
     };
 
     (&mut $($ids:ident).+, $($tail:tt)*) => {
-        $crate::__capture!(__builtin::refer_mut($($ids).+), $($tail)*);
+        $crate::__capture!(__Built_In::refer_mut($($ids).+), $($tail)*);
     };
 
     /* ----------------------------------------- Escape ----------------------------------------- */
@@ -385,11 +427,11 @@ macro_rules! __apply_ops {
         $crate::__sync_help::Downgrade::downgrade(&$($v)*)
     };
 
-    (__builtin::refer, $($v:tt)*) => {
+    (__Built_In::refer, $($v:tt)*) => {
         &$($v)*
     };
 
-    (__builtin::refer_mut, $($v:tt)*) => {
+    (__Built_In::refer_mut, $($v:tt)*) => {
         &mut $($v)*
     };
 
@@ -398,6 +440,10 @@ macro_rules! __apply_ops {
     };
 
     ($($ops:ident)::*, $($v:tt)*) => {
+        ($($ops)::*)($($v)*)
+    };
+
+    ($($ops:ident)::*, &$($v:tt)*) => {
         ($($ops)::*)(&$($v)*)
     };
 }
@@ -533,9 +579,15 @@ mod test {
     fn capture_by_own() {
         let my_str = "move";
         let other_str = "move_2";
+        let str = "move_3";
 
         let closure = capture!(
-            [ot = my_str, *Own(my_str), self::to_owned(other_str)],
+            [
+                ot = my_str,
+                *Own(my_str),
+                self::to_owned(other_str),
+                String::from(str)
+            ],
             move || {
                 my_str.push_str(" back");
                 my_str
@@ -549,8 +601,10 @@ mod test {
     fn capture_by_downgrade() {
         let arc = std::sync::Arc::new("hell, world!");
         let rc = std::rc::Rc::new("hell, world!");
+        let ww = std::rc::Rc::downgrade(&rc);
 
-        let closure = capture!([Weak(arc), Weak(rc)], move || {
+        let closure = capture!([Weak(arc), Weak(rc), self::upgrade(ww)], move || {
+            drop(ww);
             (arc.upgrade().is_some(), rc.upgrade().is_some())
         });
 
