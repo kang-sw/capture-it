@@ -10,21 +10,21 @@
 //!
 
 ///
-/// Generate a closure that captures specified variables, and captures all other
-/// unspecified variables by **move**.
+/// Generate a closure that captures specified variables, and captures all other unspecified
+/// variables by **move**.
 ///
-/// The first argument to the macro is always a list of capture arguments wrapped in [],
-/// and you pass a closure or async block to the second argument, separated by commas.
-/// In this case, the second argument must be explicitly specified as move capture.
+/// The first argument to the macro is always a list of capture arguments wrapped in [], and you
+/// pass a closure or async block to the second argument, separated by commas. In this case, the
+/// second argument must be explicitly specified as move capture.
 ///
 /// # Usage
 ///
 /// ### capture by copy
 ///
 /// If you specify a variable name in square brackets, the [`Clone::clone`] function is called
-/// against that variable, creating a variable of the same name and capturing it with the
-/// specified closure. (Capturing the variable is always guaranteed, even if you don't
-/// explicitly use it within the block.)
+/// against that variable, creating a variable of the same name and capturing it with the specified
+/// closure. (Capturing the variable is always guaranteed, even if you don't explicitly use it
+/// within the block.)
 ///
 /// ```rust
 /// let a = 1;
@@ -32,12 +32,12 @@
 /// assert_eq!(closure(), 1);
 /// ```
 ///
-/// All of these rules, except for reference capture (the & prefix), which we'll discuss later,
-/// can be declared mutable by prefixing the variable name with * (an asterisk).
+/// All of these rules, except for reference capture (the & prefix), which we'll discuss later, can
+/// be declared mutable by prefixing the variable name with * (an asterisk).
 ///
-/// (NOTE: We originally wanted to use the `mut` keyword prefix, but that would cause
-/// `rustfmt` to consider the macro expression as unjustified rust code and disable formatting,
-/// so we were forced to adopt this unorthodox method)
+/// (NOTE: We originally wanted to use the `mut` keyword prefix, but that would cause `rustfmt` to
+/// consider the macro expression as unjustified rust code and disable formatting, so we were forced
+/// to adopt this unorthodox method)
 ///
 /// ```rust
 /// let count = 0;
@@ -52,10 +52,10 @@
 ///
 /// ### capture by reference
 ///
-/// You can explicitly reference-capture a variable by prefixing its name with & or &mut. (Note
-/// that all variables not specified in the capture list will be MOVE-captured, as only blocks with
-/// a MOVE policy are allowed as second arguments. Any variables you want to capture by reference
-/// must be explicitly specified in the capture list)
+/// You can explicitly reference-capture a variable by prefixing its name with & or &mut. (Note that
+/// all variables not specified in the capture list will be MOVE-captured, as only blocks with a
+/// MOVE policy are allowed as second arguments. Any variables you want to capture by reference must
+/// be explicitly specified in the capture list)
 ///
 /// ```rust
 /// let a = std::cell::Cell::new(1);
@@ -66,8 +66,8 @@
 ///
 /// ### capture by alias
 ///
-/// Similar to the lambda capture rules in modern C++, it is possible to capture an expression
-/// by giving it an alias.
+/// Similar to the lambda capture rules in modern C++, it is possible to capture an expression by
+/// giving it an alias.
 ///
 /// ```rust
 /// let mut closure = capture_it::capture!([*a = 0], move || { a += 1; a });
@@ -79,8 +79,8 @@
 ///
 /// ### capture struct fields
 ///
-/// Under limited conditions, you can capture struct fields. The following expressions will
-/// capture each struct field as a copy and a reference, respectively.
+/// Under limited conditions, you can capture struct fields. The following expressions will capture
+/// each struct field as a copy and a reference, respectively.
 ///
 /// ```rust
 /// struct Foo {
@@ -120,11 +120,13 @@
 ///
 /// There are various shortcuts for capturing variables for convenience.
 ///
-/// - `Own`: Call the `to_owned()` method on the target variable.
-/// - `Weak`: Downgrades a `Rc` or `Arc` type to a Weak reference.
+/// - `Own`: Call the [`ToOwned::to_owned`] method on the target variable.
+/// - `Weak`: Downgrades a [`std::rc::Rc`] or [`std::sync::Arc`] type to a Weak reference.
+/// - `Some`: Wrap cloned variable with [`Option`]. This is useful when you have to retrieve
+///   captured variable when it's not a [`FnOnce`] closure.
 /// - `self::<method>`: Call `method` on the given variable.
-/// - All paths that do not fall under the above rules (`$($p:ident)::*`) are replaced
-///   with function calls.
+/// - All paths that do not fall under the above rules (`$($p:ident)::*`) are replaced with function
+///   calls.
 ///
 /// ```rust
 /// use capture_it::capture;
@@ -427,6 +429,10 @@ macro_rules! __apply_ops {
         $crate::__sync_help::Downgrade::downgrade(&$($v)*)
     };
 
+    (Some, $($v:tt)*) => {
+        Some(Clone::clone(&$($v)*))
+    };
+
     (__Built_In::refer, $($v:tt)*) => {
         &$($v)*
     };
@@ -598,6 +604,18 @@ mod test {
     }
 
     #[test]
+    fn capture_by_misc_extension() {
+        let var = -1;
+        let other_str = "hello, world!".to_owned();
+
+        let closure = capture!([&var, Some(other_str)], move || {
+            other_str.unwrap() + " go away!"
+        });
+
+        assert!(closure() == "hello, world! go away!");
+    }
+
+    #[test]
     fn capture_by_downgrade() {
         let arc = std::sync::Arc::new("hell, world!");
         let rc = std::rc::Rc::new("hell, world!");
@@ -619,7 +637,7 @@ mod test {
         }
 
         let my_pewpew = PewPew { inner: "move" };
-        let closure = capture!([*Own(my_pewpew.inner)], move || {
+        let closure = capture!([*Own(my_pewpew.inner), _r = 3], move || {
             inner.push_str(" back");
             inner
         });
