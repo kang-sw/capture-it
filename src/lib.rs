@@ -9,6 +9,8 @@
 //! [`oliver-giersch/closure`](https://github.com/oliver-giersch/closure/blob/master/src/lib.rs)
 //!
 
+#![cfg_attr(all(feature = "no-std", not(test)), no_std)]
+
 ///
 /// Generate a closure that captures specified variables, and captures all other unspecified
 /// variables by **move**.
@@ -124,28 +126,33 @@
 /// - `Weak`: Downgrades a [`std::rc::Rc`] or [`std::sync::Arc`] type to a Weak reference.
 /// - `Some`: Wrap cloned variable with [`Option`]. This is useful when you have to retrieve
 ///   captured variable when it's not a [`FnOnce`] closure.
-/// - `self::<method>`: Call `method` on the given variable.
 /// - All paths that do not fall under the above rules (`$($p:ident)::*`) are replaced with function
 ///   calls.
+/// - You can simply write single method invocation on the captured variable, to capture the result
+///   of return value. `capture!([foo.bar()], move || { ... })` -> in this case, `let foo =
+///   foo.bar()` will be captured into the closure.
 ///
 /// ```rust
-/// use capture_it::capture;
+/// #[cfg(not(feature = "no-std"))]
+/// {
+///     use capture_it::capture;
 ///
-/// let hello = "hello, world!";
-/// let rc = std::rc::Rc::new(());
-/// let arc = std::sync::Arc::new(());
-/// let arc_2 = arc.clone();
-/// let hello_other = "hello, other!";
+///     let hello = "hello, world!";
+///     let rc = std::rc::Rc::new(());
+///     let arc = std::sync::Arc::new(());
+///     let arc_2 = arc.clone();
+///     let hello_other = "hello, other!";
 ///
-/// let closure = capture!([Own(hello), Weak(rc), Weak(arc), arc_2, *self::to_string(hello_other)], move || {
-///     assert_eq!(hello, "hello, world!");
-///     assert!(rc.upgrade().is_none());
-///     assert!(arc.upgrade().is_some());
-///     assert_eq!(hello_other, "hello, other!");
-/// });
+///     let closure = capture!([Own(hello), Weak(rc), Weak(arc), arc_2, *hello_other.to_string()], move || {
+///         assert_eq!(hello, "hello, world!");
+///         assert!(rc.upgrade().is_none());
+///         assert!(arc.upgrade().is_some());
+///         assert_eq!(hello_other, "hello, other!");
+///     });
 ///
-/// drop((rc, arc));
-/// closure();
+///     drop((rc, arc));
+///     closure();
+/// }
 /// ```
 #[macro_export]
 macro_rules! capture {
@@ -293,6 +300,7 @@ macro_rules! __touch_all {
         $crate::__touch_all!($($tail)*);
     };
 
+    /* -------------------------------------- By Ops - Ref -------------------------------------- */
     ($($ops:ident)::* (&$v:ident), $($tail:tt)*) => {
         drop(&$v);
         $crate::__touch_all!($($tail)*);
@@ -313,6 +321,16 @@ macro_rules! __touch_all {
         $crate::__touch_all!($($tail)*);
     };
 
+    /* ---------------------------------- By Self.* Invocation ---------------------------------- */
+    (*$v:ident.$expr:ident($($args:expr),*), $($tail:tt)*) => {
+        drop(&$v);
+        $crate::__touch_all!($($tail)*);
+    };
+
+    ($v:ident.$expr:ident($($args:expr),*), $($tail:tt)*) => {
+        drop(&$v);
+        $crate::__touch_all!($($tail)*);
+    };
 
     /* ----------------------------------------- Escape ----------------------------------------- */
     ($(,)*) => {};
@@ -344,6 +362,7 @@ macro_rules! __capture {
         $crate::__capture!($($tail)*);
     };
 
+    /* ----------------------------------- By Ops - & Prefixed ---------------------------------- */
     ($($ops:ident)::* (&$v:ident), $($tail:tt)*) => {
         let $v = $crate::__apply_ops!($($ops)::*, &$v);
         $crate::__capture!($($tail)*);
@@ -366,6 +385,16 @@ macro_rules! __capture {
         $crate::__capture!($($tail)*);
     };
 
+    /* ---------------------------------- By Self.* Invocation ---------------------------------- */
+    (*$v:ident.$expr:ident($($args:expr),*), $($tail:tt)*) => {
+        let mut $v = $v.$expr($($args),*);
+        $crate::__capture!($($tail)*);
+    };
+
+    ($v:ident.$expr:ident($($args:expr),*), $($tail:tt)*) => {
+        let $v = $v.$expr($($args),*);
+        $crate::__capture!($($tail)*);
+    };
 
     /* ----------------------------------------- By Copy ---------------------------------------- */
     ($v:ident, $($tail:tt)*) => {
@@ -441,10 +470,6 @@ macro_rules! __apply_ops {
         &mut $($v)*
     };
 
-    (self :: $fun:ident, $($v:tt)*) => {
-        ($($v)*).$fun()
-    };
-
     ($($ops:ident)::*, $($v:tt)*) => {
         ($($ops)::*)($($v)*)
     };
@@ -470,6 +495,7 @@ macro_rules! __last_tok_mut {
     () => { compile_error!("??") };
 }
 
+#[cfg(not(feature = "no-std"))]
 pub mod __sync_help {
     pub trait Downgrade {
         type Weak;
@@ -507,6 +533,7 @@ mod test {
     fn can_compile() {
         let ss = Rc::new(());
         let [foo, bar, baz, mut qux] = std::array::from_fn(|_| ss.clone());
+        let ss_2 = ss.clone();
         let strt = Foo {
             inner: ss.clone(),
             inner_mut: ss.clone(),
@@ -521,6 +548,7 @@ mod test {
                 cloned = bar.clone(),
                 *other = cloned.clone(),
                 oar = 3,
+                ss_2.clone(),
                 strt.inner,
                 *strt.inner_mut,
             ],
@@ -586,15 +614,19 @@ mod test {
         let my_str = "move";
         let other_str = "move_2";
         let str = "move_3";
+        let char_get = "hello";
 
         let closure = capture!(
             [
                 ot = my_str,
                 *Own(my_str),
-                self::to_owned(other_str),
+                other_str.to_owned(),
+                char_get.ends_with("llo"),
                 String::from(str)
             ],
             move || {
+                assert!(char_get == true);
+
                 my_str.push_str(" back");
                 my_str
             }
@@ -615,13 +647,14 @@ mod test {
         assert!(closure() == "hello, world! go away!");
     }
 
+    #[cfg(not(feature = "no-std"))]
     #[test]
     fn capture_by_downgrade() {
         let arc = std::sync::Arc::new("hell, world!");
         let rc = std::rc::Rc::new("hell, world!");
         let ww = std::rc::Rc::downgrade(&rc);
 
-        let closure = capture!([Weak(arc), Weak(rc), self::upgrade(ww)], move || {
+        let closure = capture!([Weak(arc), Weak(rc), ww.upgrade()], move || {
             drop(ww);
             (arc.upgrade().is_some(), rc.upgrade().is_some())
         });
