@@ -214,6 +214,9 @@ macro_rules! __wrap_touched {
     };
 
     /* ------------------------------------- Zero-parameter ------------------------------------- */
+    // NOTE: These cases are defined separately, since the parser recognizes empty parameter closure
+    // as logical or(||) operator... :(
+
     ([$($args:tt)*] move || {$($content:tt)*}) => {
         move || {
             $crate::__touch_all!($($args)*,);
@@ -609,6 +612,15 @@ mod test {
                 drop((foo, bar, baz, qux, cloned, inner, other, inner_mut));
             }
         );
+
+        #[derive(Default)]
+        struct Foo2 {
+            va: usize,
+        }
+
+        assert!(capture!([], move || Foo2 { va: 5 })().va == 5);
+        assert!(capture!([va = 5], move || Foo2 { va })().va == 5);
+        assert!(capture!([], move || Foo2::default())().va == 0);
     }
 
     // shamelessly cloned test cases from https://github.com/oliver-giersch/closure/blob/master/src/lib.rs

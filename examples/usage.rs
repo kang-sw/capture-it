@@ -40,6 +40,15 @@ fn main() {
     // This expr makes a closure that captures `va` by move
     let _ = capture!([], move || { va });
 
+    #[derive(Default)]
+    struct Foo {
+        va: usize,
+    }
+
+    assert!(capture!([], move || Foo { va: 5 })().va == 5);
+    assert!(capture!([va = 5], move || Foo { va })().va == 5);
+    assert!(capture!([], move || Foo::default())().va == 0);
+
     // Therefore, we can't access `va` anymore
     // let _ = capture!([], || { va }); // this line will cause compile error!
 }

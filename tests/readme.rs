@@ -1,36 +1,19 @@
-# capture-it &emsp; ![crates.io](https://img.shields.io/crates/v/capture-it)
+#[cfg(test)]
+#[test]
+fn example_generator() {
+    use capture_it::capture as closure;
 
-See [example](examples/usage.rs)
-
-For detailed documentation, see [`capture_it::capture`](src/lib.rs)
-
-## Usage
-
-Creates closures with a syntax similar to modern C++'s lambda capture rules. The first argument to
-the `capture!` macro is an array listing the arguments to be captured by the closure, and the second
-argument specifies either an 'async move' block or a 'move' closure. (to more explicitly indicate
-that the `move` closure is used, a compile-time error is raised for any async or closure
-function missing the `move` tag).
-
-The following example demonstrates how to create a generator closure by capturing an arbitrary expression (`=0`) with the `index` identifier.
-
-```rust
-    use capture_it::capture;
-
-    // You can capture an expression, as we do in c++'s lambda capture.
-    //
-    // Any identifier prefixed with *(asterisk) declared as mutable.
-    let mut gen = capture!([*index = 0], move || {
+    let mut gen = closure!([*index = 0], move || {
         index += 1;
         index
     });
 
     assert!((gen(), gen(), gen(), gen(), gen()) == (1, 2, 3, 4, 5));
-```
+}
 
-Since the function arguments of the `capture` macro must use the `move` closure, reference captures must be explicitly listed; they are represented by the `&` or `&mut` prefix, as in normal rust syntax.
-
-```rust
+#[cfg(test)]
+#[test]
+fn example_ref() {
     use capture_it::capture;
     let mut num = 0;
     let mut gen = capture!([&mut num], move || {
@@ -39,12 +22,11 @@ Since the function arguments of the `capture` macro must use the `move` closure,
     });
 
     assert!((gen(), gen(), gen(), gen(), gen()) == (1, 2, 3, 4, 5));
-```
+}
 
-The `capture!` macro calls `Clone::clone` for every argument passed in, by default. This is a more
-ergonomic way to create closures.
-
-```rust
+#[cfg(test)]
+#[test]
+fn example_ptr() {
     use capture_it::capture;
     use std::sync::{Arc, Mutex};
 
@@ -69,11 +51,11 @@ ergonomic way to create closures.
     }
 
     assert_eq!(*arc.lock().unwrap(), 2);
-```
+}
 
-This macro is particularly useful when you need to pass multiple `Arc` instances through `Clone` to different closures. Take a look at the following example to see how it simplifies traditional block capture.
-
-```rust
+#[cfg(test)]
+#[test]
+fn example_many() {
     use capture_it::capture;
     use std::sync::Arc;
 
@@ -118,11 +100,11 @@ This macro is particularly useful when you need to pass multiple `Arc` instances
     drop((arc2, arc3, arc4));
 
     while_strong_count(&arc, |x| x > 1);
-```
+}
 
-All variables other than those specified in the capture list follow the normal closure rules for rust, so if you need to take ownership of a variable, simply remove its name from the capture list.
-
-```rust
+#[cfg(test)]
+#[test]
+fn example_move_clone() {
     use capture_it::capture;
     use std::sync::Arc;
 
@@ -140,11 +122,10 @@ All variables other than those specified in the capture list follow the normal c
     while Arc::strong_count(&cloned) > 1 {
         std::thread::yield_now();
     }
-```
+}
 
-Asynchronous blocks follow the same rules.
-
-```rust
+#[cfg(test)]
+async fn example_async_impl() {
     use capture_it::capture;
     use futures::{SinkExt, StreamExt};
 
@@ -171,17 +152,32 @@ Asynchronous blocks follow the same rules.
     for val in (4..=6).chain(1..=3) {
         assert_eq!(rx.next().await.unwrap(), val);
     }
-```
+}
 
-### Bonus
+#[cfg(test)]
+#[test]
+fn example_async() {
+    futures::executor::block_on(example_async_impl());
+}
 
-The `capture` macro contains several syntactic sugars. For example, if you want to capture the type
-`&str` as the corresponding `ToOwned` type, `String`, you can apply the `Own(..)` decorator.
+#[cfg(test)]
+#[test]
+fn example_tuple_param() {
+    use capture_it::capture;
 
-```rust
+    assert_eq!(
+        capture!([*index = 3], move |(x, y)| { x + y + index })((1, 2)),
+        6
+    );
+}
+
+#[cfg(test)]
+#[test]
+fn example_decorate() {
     use capture_it::capture;
 
     let hello = "hello, world!";
+
     let mut gen = capture!([*Own(hello), *times = 0], move || {
         times += 1;
         hello.push_str(&times.to_string());
@@ -191,11 +187,11 @@ The `capture` macro contains several syntactic sugars. For example, if you want 
     assert_eq!(gen(), "hello, world!1");
     assert_eq!(gen(), "hello, world!12");
     assert_eq!(gen(), "hello, world!123");
-```
+}
 
-The `Weak` decorator is used to capture a downgraded instance of `Arc` or `Rc`.
-
-```rust
+#[cfg(test)]
+#[test]
+fn example_weak() {
     use capture_it::capture;
     use std::rc::Rc;
     use std::sync::Arc;
@@ -210,19 +206,17 @@ The `Weak` decorator is used to capture a downgraded instance of `Arc` or `Rc`.
 
     drop(rc); // Let weak pointer upgrade of 'rc' fail
     closure();
-```
+}
 
-The `Some` decorator is useful to mimic `FnOnce` in the `FnMut` function.
-
-```rust
+#[cfg(test)]
+#[test]
+fn example_some() {
     use capture_it::capture;
 
     let initial_value = ();
     let mut increment = 0;
-
     let mut closure = capture!([*Some(initial_value), &mut increment], move || {
         if let Some(_) = initial_value.take() {
-            // Evaluated only once, as we can take out `initial_value` only for single time...
             *increment = 100;
         } else {
             *increment += 1;
@@ -234,12 +228,11 @@ The `Some` decorator is useful to mimic `FnOnce` in the `FnMut` function.
     closure();
 
     assert_eq!(increment, 102);
-```
+}
 
-Any other function call with single argument can be used as a decorator. For example, the normal
-clone representation of the `capture` macro is replaced by `Clone::clone(var)`.
-
-```rust
+#[cfg(test)]
+#[test]
+fn example_deco_misc() {
     use capture_it::capture;
 
     let clone1 = std::sync::Arc::new(());
@@ -251,16 +244,11 @@ clone representation of the `capture` macro is replaced by `Clone::clone(var)`.
     });
 
     closure();
-```
+}
 
-Alternatively, you can capture the return value of a function called on `self` as the name of its
-variable. Function calls can contain parameters, but there are some restrictions; for example,
-re-chaining to a function's return value will not work (`var.foo().bar()....`). Only one function
-call is allowed.
-
-Decorators are useful for capturing simple type changes; if you want to capture complex expressions, it's best to use the assignment syntax of `a=b`.
-
-```rust
+#[cfg(test)]
+#[test]
+fn example_method() {
     use std::{rc::Rc, sync::Arc};
 
     use capture_it::capture;
@@ -280,20 +268,4 @@ Decorators are useful for capturing simple type changes; if you want to capture 
     });
 
     closure();
-```
-
-# Trivia
-
-## Other closure crates use a more intuitive capture syntax...
-
-For example, the `(move a, ref b, clone b, ...)` grammar in the [`closure`](https://crates.io/crates/closure) crate can express closure parameters more intuitively.
-
-On the other hand, the `*` prefix to express the mutability of `capture-it` is unintuitive and hard to understand - why did we do it this way?
-
-Introducing new grammars is a very tempting option, but by default, most of these attempts are poorly understood by the `rustfmt` utility.
-
-Since closure macros typically pass the function body as a macro argument, a fairly long body can lose the benefit of the formatter if the `rustfmt` parser fails to parse the macro argument.
-
-On the other hand, the `capture_it::capture` macro is a perfectly valid rust syntax (at least syntactically) that simply passes an array and a single function block as macro arguments. (Also, a capture list wrapped in [square brackets] can be used in a similar sense to C++.)
-
-So any capture and function block you define in the `capture_it::capture` macro can be formatted by `rustfmt`, which is something I personally find quite important.
+}
