@@ -168,10 +168,34 @@ macro_rules! capture {
 #[doc(hidden)]
 macro_rules! __wrap_touched {
     /* --------------------------------------- Parametered -------------------------------------- */
-    ([$($args:tt)*] move |$($params:tt $(:$param_type:ty)?),*| $($deco:ident)* { $($content:tt)* }) => {
-        move |$($params $(:$param_type)?),*| $($deco)* {
+    ([$($args:tt)*] move |$($params:tt $(:$param_type:ty)?),*| { $($content:tt)* }) => {
+        move |$($params $(:$param_type)?),*| {
             $crate::__touch_all!($($args)*,);
             $($content)*
+        }
+    };
+
+    ([$($args:tt)*] move |$($params:tt $(:$param_type:ty)?),*| async { $($content:tt)* }) => {
+        move |$($params $(:$param_type)?),*| async {
+            $crate::__touch_all!($($args)*,);
+            $($content)*
+        }
+    };
+
+    ([$($args:tt)*] move |$($params:tt $(:$param_type:ty)?),*| async move { $($content:tt)* }) => {
+        move |$($params $(:$param_type)?),*| async move {
+            $crate::__touch_all!($($args)*,);
+            $($content)*
+        }
+    };
+
+    ([$($args:tt)*] move |$($params:tt $(:$param_type:ty)?),*| $type_name:path { $($content:tt)* }) => {
+        move |$($params $(:$param_type)?),*| {
+            $crate::__touch_all!($($args)*,);
+
+            $type_name {
+                $($content)*
+            }
         }
     };
 
@@ -190,10 +214,33 @@ macro_rules! __wrap_touched {
     };
 
     /* ------------------------------------- Zero-parameter ------------------------------------- */
-    ([$($args:tt)*]move  || $($deco:ident)* {$($content:tt)*}) => {
-        move || $($deco)* {
+    ([$($args:tt)*] move || {$($content:tt)*}) => {
+        move || {
             $crate::__touch_all!($($args)*,);
             $($content)*
+        }
+    };
+
+    ([$($args:tt)*] move || async {$($content:tt)*}) => {
+        move || async {
+            $crate::__touch_all!($($args)*,);
+            $($content)*
+        }
+    };
+
+    ([$($args:tt)*] move || async move {$($content:tt)*}) => {
+        move || async move {
+            $crate::__touch_all!($($args)*,);
+            $($content)*
+        }
+    };
+
+    ([$($args:tt)*] move || $type_name:path {$($content:tt)*}) => {
+        move || {
+            $crate::__touch_all!($($args)*,);
+            $type_name {
+                $($content)*
+            }
         }
     };
 
