@@ -276,109 +276,109 @@ macro_rules! __wrap_touched {
 macro_rules! __touch_all {
     /* ----------------------------------------- By Copy ---------------------------------------- */
     ($v:ident, $($tail:tt)*) => {
-        drop(&$v);
+        let _ = &$v;
         $crate::__touch_all!($($tail)*);
     };
 
     (* $v:ident, $($tail:tt)*) => {
-        drop(&$v);
+        let _ = &$v;
         $crate::__touch_all!($($tail)*);
     };
 
     /* -------------------------------------- By Reference -------------------------------------- */
     (&$v:ident, $($tail:tt)*) => {
-        drop(&$v);
+        let _ = &$v;
         $crate::__touch_all!($($tail)*);
     };
 
     (&mut $v:ident, $($tail:tt)*) => {
-        drop(&$v);
+        let _ = &$v;
         $crate::__touch_all!($($tail)*);
     };
 
     /* -------------------------------------- By Expression ------------------------------------- */
     ($a:ident=$_:expr, $($tail:tt)*) => {
-        drop(&$a);
+        let _ = &$a;
         $crate::__touch_all!($($tail)*);
     };
 
     (* $a:ident=$_:expr, $($tail:tt)*) => {
-        drop(&$a);
+        let _ = &$a;
         $crate::__touch_all!($($tail)*);
     };
 
     /* ------------------------------------- Struct By Copy ------------------------------------- */
     ($($ids:ident).+, $($tail:tt)*) => {
-        drop(&$crate::__last_tok!($($ids).+));
+        let _ = &$crate::__last_tok!($($ids).+);
         $crate::__touch_all!($($tail)*);
     };
 
     (* $($ids:ident).+, $($tail:tt)*) => {
-        drop(&$crate::__last_tok!($($ids).+));
+        let _ = &$crate::__last_tok!($($ids).+);
         $crate::__touch_all!($($tail)*);
     };
 
     /* ----------------------------------- Struct By Reference ---------------------------------- */
     (&$($ids:ident).+, $($tail:tt)*) => {
-        drop(&$crate::__last_tok!($($ids).+));
+        let _ = &$crate::__last_tok!($($ids).+);
         $crate::__touch_all!($($tail)*);
     };
 
     (&mut $($ids:ident).+, $($tail:tt)*) => {
-        drop(&$crate::__last_tok!($($ids).+));
+        let _ = $crate::__last_tok!($($ids).+);
         $crate::__touch_all!($($tail)*);
     };
 
     /* ----------------------------------------- By Ops ----------------------------------------- */
     ($($ops:ident)::* ($v:ident), $($tail:tt)*) => {
-        drop(&$v);
+        let _ = &$v;
         $crate::__touch_all!($($tail)*);
     };
 
     (*$($ops:ident)::* ($v:ident), $($tail:tt)*) => {
-        drop(&$v);
+        let _ = &$v;
         $crate::__touch_all!($($tail)*);
     };
 
     ($($ops:ident)::* ($($ids:ident).+), $($tail:tt)*) => {
-        drop(&$crate::__last_tok!($($ids).+));
+        let _ = &$crate::__last_tok!($($ids).+);
         $crate::__touch_all!($($tail)*);
     };
 
     (*$($ops:ident)::* ($($ids:ident).+), $($tail:tt)*) => {
-        drop(&$crate::__last_tok!($($ids).+));
+        let _ = &$crate::__last_tok!($($ids).+);
         $crate::__touch_all!($($tail)*);
     };
 
     /* -------------------------------------- By Ops - Ref -------------------------------------- */
     ($($ops:ident)::* (&$v:ident), $($tail:tt)*) => {
-        drop(&$v);
+        let _ = &$v;
         $crate::__touch_all!($($tail)*);
     };
 
     (*$($ops:ident)::* (&$v:ident), $($tail:tt)*) => {
-        drop(&$v);
+        let _ = &$v;
         $crate::__touch_all!($($tail)*);
     };
 
     ($($ops:ident)::* (&$($ids:ident).+), $($tail:tt)*) => {
-        drop(&$crate::__last_tok!($($ids).+));
+        let _ = &$crate::__last_tok!($($ids).+);
         $crate::__touch_all!($($tail)*);
     };
 
     (*$($ops:ident)::* (&$($ids:ident).+), $($tail:tt)*) => {
-        drop(&$crate::__last_tok!($($ids).+));
+        let _ = &$crate::__last_tok!($($ids).+);
         $crate::__touch_all!($($tail)*);
     };
 
     /* ---------------------------------- By Self.* Invocation ---------------------------------- */
     (*$v:ident.$expr:ident($($args:expr),*), $($tail:tt)*) => {
-        drop(&$v);
+        let _ = &$v;
         $crate::__touch_all!($($tail)*);
     };
 
     ($v:ident.$expr:ident($($args:expr),*), $($tail:tt)*) => {
-        drop(&$v);
+        let _ = &$v;
         $crate::__touch_all!($($tail)*);
     };
 
@@ -589,6 +589,8 @@ mod test {
             inner_mut: ss.clone(),
         };
 
+        drop(ss);
+
         let _ = capture!(
             [
                 foo,
@@ -684,7 +686,7 @@ mod test {
                 String::from(str)
             ],
             move || {
-                assert!(char_get == true);
+                assert!(char_get);
 
                 my_str.push_str(" back");
                 my_str

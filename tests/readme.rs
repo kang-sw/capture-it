@@ -213,10 +213,10 @@ fn example_weak() {
 fn example_some() {
     use capture_it::capture;
 
-    let initial_value = ();
+    let initial_value = 0;
     let mut increment = 0;
     let mut closure = capture!([*Some(initial_value), &mut increment], move || {
-        if let Some(_) = initial_value.take() {
+        if initial_value.take().is_some() {
             *increment = 100;
         } else {
             *increment += 1;
