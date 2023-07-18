@@ -804,19 +804,26 @@ mod test {
         use capture as c_;
 
         c_!([val, val2], move || val + val2);
-        c_!([val, val2], move |_: i32| val + val2);
-        c_!([val, val2], move |_: i32| -> i32 { val + val2 });
-        c_!([val, val2], move || -> i32 { val + val2 });
-        c_!([val, val2], move || async move { val + val2 });
-        c_!([val, val2], move || async {});
         c_!([val, val2]..|| val + val2);
+
+        c_!([val, val2], move |_: i32| val + val2);
         c_!([val, val2]..|_: i32| val + val2);
+
+        c_!([val, val2], move |_: i32| -> i32 { val + val2 });
         c_!([val, val2]..|_: i32| -> i32 { val + val2 });
+
+        c_!([val, val2], move || -> i32 { val + val2 });
         c_!([val, val2]..|| -> i32 { val + val2 });
+
+        c_!([val, val2], move || async move { val + val2 });
         c_!([val, val2]..|| async move { val + val2 });
+
+        c_!([val, val2], move || async {});
         c_!([val, val2]..|| async {});
-        c_!([val, val2]..|| async {});
+
+        c_!([val, val2], async move {});
         c_!([val, val2]..async {});
+
         c_!([]..async { val });
         assert!(3 == capture!([val, val2], move || val + val2)());
         assert!(3 == c_!([val, val2]..|| val + val2)());
