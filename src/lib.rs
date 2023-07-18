@@ -795,7 +795,6 @@ mod test {
     }
 
     #[test]
-    #[cfg(feature = "additional-macros")]
     #[allow(unused_must_use)]
     #[allow(unused_unsafe)]
     fn test_compilation() {

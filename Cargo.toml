@@ -11,6 +11,4 @@ license = "MIT"
 futures = "0.3"
 
 [features]
-default = ["additional-macros"]
 no-std = []
-additional-macros = []
