@@ -166,7 +166,7 @@ fn example_tuple_param() {
     use capture_it::capture;
 
     assert_eq!(
-        capture!([*index = 3], move |(x, y)| { x + y + index })((1, 2)),
+        capture!([*index = 3], move |(x, y)| x + y + index)((1, 2)),
         6
     );
 }

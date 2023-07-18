@@ -168,34 +168,10 @@ macro_rules! capture {
 #[doc(hidden)]
 macro_rules! __wrap_touched {
     /* --------------------------------------- Parametered -------------------------------------- */
-    ([$($args:tt)*] move |$($params:tt $(:$param_type:ty)?),*| { $($content:tt)* }) => {
+    ([$($args:tt)*] move |$($params:tt $(:$param_type:ty)?),*| $expr:expr) => {
         move |$($params $(:$param_type)?),*| {
             $crate::__touch_all!($($args)*,);
-            $($content)*
-        }
-    };
-
-    ([$($args:tt)*] move |$($params:tt $(:$param_type:ty)?),*| async { $($content:tt)* }) => {
-        move |$($params $(:$param_type)?),*| async {
-            $crate::__touch_all!($($args)*,);
-            $($content)*
-        }
-    };
-
-    ([$($args:tt)*] move |$($params:tt $(:$param_type:ty)?),*| async move { $($content:tt)* }) => {
-        move |$($params $(:$param_type)?),*| async move {
-            $crate::__touch_all!($($args)*,);
-            $($content)*
-        }
-    };
-
-    ([$($args:tt)*] move |$($params:tt $(:$param_type:ty)?),*| $type_name:path { $($content:tt)* }) => {
-        move |$($params $(:$param_type)?),*| {
-            $crate::__touch_all!($($args)*,);
-
-            $type_name {
-                $($content)*
-            }
+            $expr
         }
     };
 
@@ -206,44 +182,11 @@ macro_rules! __wrap_touched {
         }
     };
 
-    ([$($args:tt)*] move |$($params:tt $(:$param_type:ty)?),*| $content:expr) => {
-        move |$($params $(:$param_type)?),*| {
+    /* --------------------------------------- Zero Params -------------------------------------- */
+    ([$($args:tt)*] move || $content:expr) => {
+        move || {
             $crate::__touch_all!($($args)*,);
             $content
-        }
-    };
-
-    /* ------------------------------------- Zero-parameter ------------------------------------- */
-    // NOTE: These cases are defined separately, since the parser recognizes empty parameter closure
-    // as logical or(||) operator... :(
-
-    ([$($args:tt)*] move || {$($content:tt)*}) => {
-        move || {
-            $crate::__touch_all!($($args)*,);
-            $($content)*
-        }
-    };
-
-    ([$($args:tt)*] move || async {$($content:tt)*}) => {
-        move || async {
-            $crate::__touch_all!($($args)*,);
-            $($content)*
-        }
-    };
-
-    ([$($args:tt)*] move || async move {$($content:tt)*}) => {
-        move || async move {
-            $crate::__touch_all!($($args)*,);
-            $($content)*
-        }
-    };
-
-    ([$($args:tt)*] move || $type_name:path {$($content:tt)*}) => {
-        move || {
-            $crate::__touch_all!($($args)*,);
-            $type_name {
-                $($content)*
-            }
         }
     };
 
@@ -254,14 +197,7 @@ macro_rules! __wrap_touched {
         }
     };
 
-    ([$($args:tt)*] move || $content:expr) => {
-        move || {
-            $crate::__touch_all!($($args)*,);
-            $content
-        }
-    };
-
-    /* ------------------------------------------ Async ----------------------------------------- */
+    /* --------------------------------------- Async Move --------------------------------------- */
     ([$($args:tt)*] async move {$($content:tt)*}) => {
         async move {
             $crate::__touch_all!($($args)*,);
@@ -818,5 +754,32 @@ mod test {
         closure();
         assert_eq!(val.borrowed, 3);
         assert_eq!(val.copied, 2);
+    }
+
+    #[test]
+    #[allow(unused_must_use)]
+    fn test_compilation() {
+        let val = 1;
+        let val2 = 2;
+
+        capture!([val, val2], move || val + val2);
+        capture!([val, val2], move |_: i32| val + val2);
+        capture!([val, val2], move |_: i32| -> i32 { val + val2 });
+        capture!([val, val2], move || -> i32 { val + val2 });
+        capture!([val, val2], move || async move { val + val2 });
+        capture!([val, val2], move || async {});
+        capture!([val, val2], async move {});
+        capture!([val, val2], move |_: i32, _x| unsafe {
+            core::mem::zeroed::<i32>()
+        })(1, 2);
+
+        struct MyType(i32, i32);
+        capture!([val, val2], move |_: i32, _: i32| MyType(1, 22));
+
+        struct MyType2 {
+            _a: i32,
+            _b: i32,
+        }
+        capture!([val, val2], move |_: i32, _: i32| MyType2 { _a: 1, _b: 22 });
     }
 }

@@ -38,7 +38,11 @@ fn main() {
     assert_eq!(va.load(Relaxed), 2);
 
     // This expr makes a closure that captures `va` by move
-    let _ = capture!([], move || { va });
+    let _ = capture!([], move || va);
+    let _ = capture!([], move || <Vec<u8>>::new());
+
+    #[allow(unused_unsafe)]
+    let _ = capture!([], move || unsafe { <Vec<u8>>::new() });
 
     #[derive(Default)]
     struct Foo {
