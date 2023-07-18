@@ -30,7 +30,7 @@
 ///
 /// ```rust
 /// let a = 1;
-/// let closure = capture_it::capture!([a], move || { a });
+/// let closure = capture_it::capture!([a]..|| { a });
 /// assert_eq!(closure(), 1);
 /// ```
 ///
@@ -43,7 +43,7 @@
 ///
 /// ```rust
 /// let count = 0;
-/// let mut closure = capture_it::capture!([*count], move || { count += 1; count });
+/// let mut closure = capture_it::capture!([*count]..|| { count += 1; count });
 ///
 /// assert_eq!(closure(), 1);
 /// assert_eq!(closure(), 2);
@@ -61,7 +61,7 @@
 ///
 /// ```rust
 /// let a = std::cell::Cell::new(1);
-/// let closure = capture_it::capture!([&a], move || { a.get() });
+/// let closure = capture_it::capture!([&a]..|| { a.get() });
 /// a.set(2);
 /// assert_eq!(closure(), 2);
 /// ```
@@ -72,7 +72,7 @@
 /// giving it an alias.
 ///
 /// ```rust
-/// let mut closure = capture_it::capture!([*a = 0], move || { a += 1; a });
+/// let mut closure = capture_it::capture!([*a = 0]..|| { a += 1; a });
 ///
 /// assert_eq!(closure(), 1);
 /// assert_eq!(closure(), 2);
@@ -91,7 +91,7 @@
 /// }
 ///
 /// let mut foo = Foo { copied: 1, borrowed: 2.into() };
-/// let closure = capture_it::capture!([foo.copied, &foo.borrowed], move || {
+/// let closure = capture_it::capture!([foo.copied, &foo.borrowed]..|| {
 ///     copied + borrowed.get()
 /// });
 ///
@@ -107,7 +107,7 @@
 /// ```rust
 /// let mut copied = 1;
 /// let borrowed = std::cell::Cell::new(2);
-/// let task = capture_it::capture!([copied, &borrowed], async move {
+/// let task = capture_it::capture!([copied, &borrowed]..async {
 ///    copied + borrowed.get()
 /// });
 ///
@@ -143,7 +143,7 @@
 ///     let arc_2 = arc.clone();
 ///     let hello_other = "hello, other!";
 ///
-///     let closure = capture!([Own(hello), Weak(rc), Weak(arc), arc_2, *hello_other.to_string()], move || {
+///     let closure = capture!([Own(hello), Weak(rc), Weak(arc), arc_2, *hello_other.to_string()]..|| {
 ///         assert_eq!(hello, "hello, world!");
 ///         assert!(rc.upgrade().is_none());
 ///         assert!(arc.upgrade().is_some());
