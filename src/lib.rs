@@ -160,6 +160,12 @@ macro_rules! capture {
         $crate::__capture!($($args)*,);
         $crate::__wrap_touched!([$($args)*] $($closure)*)
     }};
+
+    ([$($args:tt)*]..$($closure:tt)*) => {{
+        $crate::__capture!($($args)*,);
+        $crate::__wrap_touched_v2!([$($args)*] $($closure)*)
+    }};
+
 }
 
 /// Generate a closure that touches all specified variables, which makes all of them to be
@@ -199,6 +205,49 @@ macro_rules! __wrap_touched {
 
     /* --------------------------------------- Async Move --------------------------------------- */
     ([$($args:tt)*] async move {$($content:tt)*}) => {
+        async move {
+            $crate::__touch_all!($($args)*,);
+            $($content)*
+        }
+    };
+}
+
+/// Doesn't require 'move' keyword here.
+#[macro_export(local_inner_macros)]
+#[doc(hidden)]
+macro_rules! __wrap_touched_v2 {
+    /* --------------------------------------- Parametered -------------------------------------- */
+    ([$($args:tt)*] |$($params:tt $(:$param_type:ty)?),*| $expr:expr) => {
+        move |$($params $(:$param_type)?),*| {
+            $crate::__touch_all!($($args)*,);
+            $expr
+        }
+    };
+
+    ([$($args:tt)*] |$($params:tt $(:$param_type:ty)?),*| -> $rt:ty { $($content:tt)* }) => {
+        move |$($params $(:$param_type)?),*| -> $rt {
+            $crate::__touch_all!($($args)*,);
+            $($content)*
+        }
+    };
+
+    /* --------------------------------------- Zero Params -------------------------------------- */
+    ([$($args:tt)*] || $content:expr) => {
+        move || {
+            $crate::__touch_all!($($args)*,);
+            $content
+        }
+    };
+
+    ([$($args:tt)*] || -> $rt:ty { $($content:tt)* }) => {
+        move || -> $rt {
+            $crate::__touch_all!($($args)*,);
+            $($content)*
+        }
+    };
+
+    /* --------------------------------------- Async Move --------------------------------------- */
+    ([$($args:tt)*] async {$($content:tt)*}) => {
         async move {
             $crate::__touch_all!($($args)*,);
             $($content)*
@@ -520,10 +569,7 @@ mod test {
         let ss = Rc::new(());
         let [foo, bar, baz, mut qux] = std::array::from_fn(|_| ss.clone());
         let ss_2 = ss.clone();
-        let strt = Foo {
-            inner: ss.clone(),
-            inner_mut: ss.clone(),
-        };
+        let strt = Foo { inner: ss.clone(), inner_mut: ss.clone() };
 
         drop(ss);
 
@@ -637,9 +683,7 @@ mod test {
         let var = -1;
         let other_str = "hello, world!".to_owned();
 
-        let closure = capture!([&var, Some(other_str)], move || {
-            other_str.unwrap() + " go away!"
-        });
+        let closure = capture!([&var, Some(other_str)], move || other_str.unwrap() + " go away!");
 
         assert!(closure() == "hello, world! go away!");
     }
@@ -702,13 +746,10 @@ mod test {
     #[test]
     fn capture_by_clone() {
         let rc = Rc::new(0);
-        let closure = capture!(
-            [rc, _unused_but_captured = rc.clone()],
-            move |expected| -> bool {
-                assert_eq!(Rc::strong_count(&rc), 3);
-                *rc == expected
-            }
-        );
+        let closure = capture!([rc, _unused_but_captured = rc.clone()], move |expected| -> bool {
+            assert_eq!(Rc::strong_count(&rc), 3);
+            *rc == expected
+        });
         assert!(closure(0));
     }
 
@@ -739,10 +780,7 @@ mod test {
             copied: i32,
         }
 
-        let mut val = Bar {
-            borrowed: 1,
-            copied: 2,
-        };
+        let mut val = Bar { borrowed: 1, copied: 2 };
 
         let mut closure = capture!([&mut val.borrowed, val.copied], move || {
             assert_eq!(*borrowed, 1);
@@ -757,24 +795,44 @@ mod test {
     }
 
     #[test]
+    #[cfg(feature = "additional-macros")]
     #[allow(unused_must_use)]
+    #[allow(unused_unsafe)]
     fn test_compilation() {
         let val = 1;
         let val2 = 2;
 
-        capture!([val, val2], move || val + val2);
-        capture!([val, val2], move |_: i32| val + val2);
-        capture!([val, val2], move |_: i32| -> i32 { val + val2 });
-        capture!([val, val2], move || -> i32 { val + val2 });
-        capture!([val, val2], move || async move { val + val2 });
-        capture!([val, val2], move || async {});
-        capture!([val, val2], async move {});
-        capture!([val, val2], move |_: i32, _x| unsafe {
-            core::mem::zeroed::<i32>()
-        })(1, 2);
+        use capture as c_;
+
+        c_!([val, val2], move || val + val2);
+        c_!([val, val2], move |_: i32| val + val2);
+        c_!([val, val2], move |_: i32| -> i32 { val + val2 });
+        c_!([val, val2], move || -> i32 { val + val2 });
+        c_!([val, val2], move || async move { val + val2 });
+        c_!([val, val2], move || async {});
+        c_!([val, val2]..|| val + val2);
+        c_!([val, val2]..|_: i32| val + val2);
+        c_!([val, val2]..|_: i32| -> i32 { val + val2 });
+        c_!([val, val2]..|| -> i32 { val + val2 });
+        c_!([val, val2]..|| async move { val + val2 });
+        c_!([val, val2]..|| async {});
+        c_!([val, val2]..|| async {});
+        c_!([val, val2]..async {});
+        c_!([]..async { val });
+        assert!(3 == capture!([val, val2], move || val + val2)());
+        assert!(3 == c_!([val, val2]..|| val + val2)());
+        assert!(3 == c_!([val, val2]..|| unsafe { val + val2 })());
+        assert!(3 == c_!([val, val2]..|| return val + val2)());
+        assert!(
+            c_!([val, val2]..|| {
+                return val + val2;
+            })() == 3
+        );
+        c_!([val, val2], async move {});
+        c_!([val, val2], move |_: i32, _x| unsafe { core::mem::zeroed::<i32>() })(1, 2);
 
         struct MyType(i32, i32);
-        capture!([val, val2], move |_: i32, _: i32| MyType(1, 22));
+        c_!([val, val2], move |_: i32, _: i32| MyType(1, 22));
 
         struct MyType2 {
             _a: i32,
